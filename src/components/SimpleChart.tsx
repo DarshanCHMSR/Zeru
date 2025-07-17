@@ -1,5 +1,5 @@
 import React from 'react';
-import { useGasStore, GasPoint } from '@/store/gasStore';
+import { useGasStore } from '@/store/gasStore';
 
 interface SimpleChartProps {
   chain: 'ethereum' | 'polygon' | 'arbitrum';

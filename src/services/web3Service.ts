@@ -28,16 +28,8 @@ const CHAIN_CONFIGS = {
 
 type ChainKey = keyof typeof CHAIN_CONFIGS;
 
-// Uniswap V3 ETH/USDC pool address
-const UNISWAP_V3_ETH_USDC_POOL = '0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640';
-
-// Uniswap V3 Pool ABI (only the events we need)
-const UNISWAP_V3_POOL_ABI = [
-  'event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)',
-];
-
 class Web3Service {
-  private providers: Map<string, ethers.WebSocketProvider> = new Map();
+  private providers: Map<string, ethers.JsonRpcProvider> = new Map();
   private isConnected: Map<string, boolean> = new Map();
   private reconnectTimeouts: Map<string, NodeJS.Timeout> = new Map();
 
@@ -74,7 +66,7 @@ class Web3Service {
       // Test connection
       await provider.getBlockNumber();
 
-      this.providers.set(chainKey, provider as any);
+      this.providers.set(chainKey, provider);
       this.isConnected.set(chainKey, true);
       store.setConnectionStatus(chainKey as ChainKey, true);
 
@@ -123,7 +115,7 @@ class Web3Service {
               if (feeData.maxPriorityFeePerGas) {
                 priorityFee = Number(feeData.maxPriorityFeePerGas);
               }
-            } catch (error) {
+            } catch {
               // Fallback to 2 Gwei
               priorityFee = Number(ethers.parseUnits('2', 'gwei'));
             }
@@ -218,7 +210,6 @@ class Web3Service {
   }
 
   public async getCurrentGasPrices() {
-    const store = useGasStore.getState();
     const results: Record<string, { baseFee: number; priorityFee: number }> = {};
 
     for (const [chainKey, provider] of this.providers.entries()) {
@@ -240,7 +231,7 @@ class Web3Service {
     // Clean up connections
     for (const provider of this.providers.values()) {
       if (provider && 'destroy' in provider) {
-        (provider as any).destroy();
+        provider.destroy?.();
       }
     }
     

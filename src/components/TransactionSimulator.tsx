@@ -88,7 +88,7 @@ const TransactionSimulator: React.FC = () => {
           </label>
           <select
             value={simulationInput.chain}
-            onChange={(e) => setSimulationInput({ chain: e.target.value as any })}
+            onChange={(e) => setSimulationInput({ chain: e.target.value as 'ethereum' | 'polygon' | 'arbitrum' })}
             className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="ethereum">Ethereum</option>
