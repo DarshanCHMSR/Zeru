@@ -45,9 +45,20 @@ const SimpleChart: React.FC<SimpleChartProps> = ({ chain, height = 300 }) => {
     const minValue = Math.min(...chainData.history.map(p => p.close));
     const valueRange = maxValue - minValue || 1;
 
+    // Safety check for NaN values
+    if (!isFinite(maxValue) || !isFinite(minValue) || !isFinite(valueRange)) {
+      return null;
+    }
+
     const points = chainData.history.map((point, index) => {
       const x = (index / (chainData.history.length - 1)) * 100;
       const y = ((maxValue - point.close) / valueRange) * 80 + 10;
+      
+      // Safety check for NaN values
+      if (!isFinite(x) || !isFinite(y)) {
+        return '0,0';
+      }
+      
       return `${x},${y}`;
     }).join(' ');
 
