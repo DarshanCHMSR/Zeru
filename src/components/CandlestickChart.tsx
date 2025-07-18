@@ -2,10 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { 
   createChart, 
   IChartApi, 
-  ISeriesApi, 
   LineData, 
-  ColorType,
-  LineSeriesPartialOptions
+  ColorType
 } from 'lightweight-charts';
 import { useGasStore, GasPoint } from '@/store/gasStore';
 
@@ -29,7 +27,7 @@ const chainNames = {
 const CandlestickChart: React.FC<CandlestickChartProps> = ({ chain, height = 300 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<any>(null);
+  const seriesRef = useRef<ReturnType<IChartApi['addSeries']> | null>(null);
   const [isChartReady, setIsChartReady] = useState(false);
 
   const { chains } = useGasStore();
@@ -68,8 +66,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ chain, height = 300
     });
 
     // Add line series (simplified from candlestick for compatibility)
-    const lineSeries = chart.addSeries({
-      type: 'Line',
+    const lineSeries = chart.addLineSeries({
       color: chainColors[chain],
       lineWidth: 2,
     });
@@ -100,7 +97,7 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ chain, height = 300
 
     // Convert GasPoint data to LineData format (using close price)
     const lineData: LineData[] = chainData.history.map((point: GasPoint) => ({
-      time: Math.floor(point.time / 1000) as any, // Convert to seconds
+      time: Math.floor(point.time / 1000) as LineData['time'], // Convert to seconds
       value: point.close,
     }));
 

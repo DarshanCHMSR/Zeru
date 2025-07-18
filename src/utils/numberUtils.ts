@@ -1,5 +1,5 @@
 // Utility functions for safe number formatting and handling
-export const safeNumber = (value: any, fallback: number = 0): number => {
+export const safeNumber = (value: unknown, fallback: number = 0): number => {
   if (typeof value !== 'number' || !isFinite(value) || isNaN(value)) {
     return fallback;
   }
@@ -69,9 +69,9 @@ export const safeSvgPoints = (points: Array<{x: number, y: number}>): string => 
 };
 
 // Debug helpers
-export const debugNumber = (value: any, label?: string): void => {
+export const debugNumber = (value: unknown, label?: string): void => {
   if (process.env.NODE_ENV === 'development') {
     const prefix = label ? `[${label}]` : '';
-    console.log(`${prefix} Value: ${value}, Type: ${typeof value}, isFinite: ${isFinite(value)}, isNaN: ${isNaN(value)}`);
+    console.log(`${prefix} Value: ${value}, Type: ${typeof value}, isFinite: ${isFinite(value as number)}, isNaN: ${isNaN(value as number)}`);
   }
 };

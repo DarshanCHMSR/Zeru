@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 import { useGasStore } from '@/store/gasStore';
-import { DEV_CONFIG, devLog, isDevelopment } from '@/config/development';
+import { DEV_CONFIG, devLog } from '@/config/development';
 
 interface ChainConfig {
   name: string;
@@ -246,7 +246,7 @@ class Web3Service {
     const intervalId = setInterval(pollLatestBlock, 6000); // Poll every 6 seconds
     
     // Store interval ID for cleanup
-    this.reconnectTimeouts.set(`${chainKey}_monitor`, intervalId as any);
+    this.reconnectTimeouts.set(`${chainKey}_monitor`, intervalId as NodeJS.Timeout);
   }
 
   private async startUsdPriceMonitoring() {
