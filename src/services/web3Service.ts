@@ -9,41 +9,44 @@ interface ChainConfig {
   blockTime: number; // in seconds
 }
 
-// Chain configurations with more reliable RPC endpoints
+// Chain configurations optimized based on RPC testing results
 const CHAIN_CONFIGS = {
   ethereum: {
     name: 'Ethereum',
-    rpcUrl: 'https://ethereum.publicnode.com',
+    rpcUrl: 'https://ethereum.publicnode.com', // ✅ Best: 636ms
     fallbackUrls: [
-      'https://rpc.ankr.com/eth',
-      'https://eth.llamarpc.com',
-      'https://1rpc.io/eth',
-      'https://cloudflare-eth.com',
-      'https://ethereum.blockpi.network/v1/rpc/public'
+      'https://1rpc.io/eth',                  // ✅ Working: 799ms
+      'https://eth.llamarpc.com',             // ✅ Working: 1618ms
+      // Removed failed endpoints:
+      // - https://rpc.ankr.com/eth (requires API key)
+      // - https://cloudflare-eth.com (cannot fulfill request)
+      // - https://ethereum.blockpi.network/v1/rpc/public (timeout)
     ],
     blockTime: 12,
   },
   polygon: {
     name: 'Polygon',
-    rpcUrl: 'https://polygon.publicnode.com',
+    rpcUrl: 'https://polygon.drpc.org',       // ✅ Best: 271ms
     fallbackUrls: [
-      'https://rpc.ankr.com/polygon',
-      'https://polygon.llamarpc.com',
-      'https://1rpc.io/matic',
-      'https://polygon.blockpi.network/v1/rpc/public',
-      'https://polygon.drpc.org'
+      'https://1rpc.io/matic',               // ✅ Working: 358ms
+      'https://polygon.publicnode.com',      // ✅ Working: 1038ms
+      // Removed failed endpoints:
+      // - https://rpc.ankr.com/polygon (requires API key)
+      // - https://polygon.llamarpc.com (failed to fetch)
+      // - https://polygon.blockpi.network/v1/rpc/public (timeout)
     ],
     blockTime: 2,
   },
   arbitrum: {
     name: 'Arbitrum',
-    rpcUrl: 'https://arbitrum.publicnode.com',
+    rpcUrl: 'https://arbitrum.drpc.org',      // ✅ Best: 283ms (from previous test)
     fallbackUrls: [
-      'https://rpc.ankr.com/arbitrum',
-      'https://arbitrum.llamarpc.com',
-      'https://1rpc.io/arb',
-      'https://arbitrum.blockpi.network/v1/rpc/public',
-      'https://arbitrum.drpc.org'
+      'https://arbitrum.publicnode.com',     // ✅ Working: 1264ms (slower but reliable)
+      // Removed failed endpoints:
+      // - https://arbitrum.llamarpc.com (failed to fetch)
+      // - https://rpc.ankr.com/arbitrum (requires API key)
+      // - https://1rpc.io/arb (failed to fetch)
+      // - https://arbitrum.blockpi.network/v1/rpc/public (timeout)
     ],
     blockTime: 1,
   },
