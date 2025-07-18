@@ -89,18 +89,25 @@ export const useGasStore = create<GasState>()(
 
     updateGas: (chain, baseFee, priorityFee) =>
       set((state) => {
+        // Safety checks for NaN values
+        const safeBaseFee = isFinite(baseFee) ? baseFee : 0;
+        const safePriorityFee = isFinite(priorityFee) ? priorityFee : 0;
+        
         const timestamp = Date.now();
-        const currentGas = (baseFee + priorityFee) / 1e9; // Convert to Gwei
+        const currentGas = (safeBaseFee + safePriorityFee) / 1e9; // Convert to Gwei
+
+        // Safety check for the final gas value
+        const safeCurrentGas = isFinite(currentGas) ? currentGas : 0;
 
         // Create new history point
         const newPoint: GasPoint = {
           time: timestamp,
           open: state.chains[chain].history.length > 0 
             ? state.chains[chain].history[state.chains[chain].history.length - 1].close 
-            : currentGas,
-          high: currentGas,
-          low: currentGas,
-          close: currentGas,
+            : safeCurrentGas,
+          high: safeCurrentGas,
+          low: safeCurrentGas,
+          close: safeCurrentGas,
         };
 
         // Update existing point if within same 15-min interval
@@ -112,9 +119,9 @@ export const useGasStore = create<GasState>()(
         
         if (lastPoint && Math.floor(lastPoint.time / intervalMs) * intervalMs === currentInterval) {
           // Update existing point in the same interval
-          lastPoint.close = currentGas;
-          lastPoint.high = Math.max(lastPoint.high, currentGas);
-          lastPoint.low = Math.min(lastPoint.low, currentGas);
+          lastPoint.close = safeCurrentGas;
+          lastPoint.high = Math.max(lastPoint.high, safeCurrentGas);
+          lastPoint.low = Math.min(lastPoint.low, safeCurrentGas);
           lastPoint.time = timestamp;
         } else {
           // Add new point
@@ -130,8 +137,8 @@ export const useGasStore = create<GasState>()(
             ...state.chains,
             [chain]: {
               ...state.chains[chain],
-              baseFee,
-              priorityFee,
+              baseFee: safeBaseFee,
+              priorityFee: safePriorityFee,
               history: updatedHistory,
               lastUpdated: timestamp,
             },
@@ -139,7 +146,7 @@ export const useGasStore = create<GasState>()(
         };
       }),
 
-    setUsdPrice: (price) => set({ usdPrice: price }),
+    setUsdPrice: (price) => set({ usdPrice: isFinite(price) ? price : 0 }),
 
     setSimulationInput: (input) =>
       set((state) => ({

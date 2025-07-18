@@ -17,10 +17,16 @@ const GasPriceOverview: React.FC = () => {
   const { chains, usdPrice } = useGasStore();
 
   const formatGwei = (wei: number) => {
+    if (!isFinite(wei) || isNaN(wei)) {
+      return '0.00';
+    }
     return (wei / 1e9).toFixed(2);
   };
 
   const formatCurrency = (amount: number) => {
+    if (!isFinite(amount) || isNaN(amount)) {
+      return '$0.00';
+    }
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
@@ -38,7 +44,12 @@ const GasPriceOverview: React.FC = () => {
     const gasLimit = 21000; // Standard ETH transfer
     const totalGasCost = (baseFee + priorityFee) * gasLimit;
     const usdCost = (totalGasCost / 1e18) * usdPrice;
-    return { totalGasCost, usdCost };
+    
+    // Safety checks for NaN values
+    const safeTotalGasCost = isFinite(totalGasCost) ? totalGasCost : 0;
+    const safeUsdCost = isFinite(usdCost) ? usdCost : 0;
+    
+    return { totalGasCost: safeTotalGasCost, usdCost: safeUsdCost };
   };
 
   return (

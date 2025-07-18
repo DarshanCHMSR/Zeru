@@ -27,6 +27,9 @@ const TransactionSimulator: React.FC = () => {
   }, [simulationInput, usdPrice, calculateSimulation]);
 
   const formatCurrency = (amount: number) => {
+    if (!isFinite(amount) || isNaN(amount)) {
+      return '$0.00';
+    }
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
@@ -34,10 +37,16 @@ const TransactionSimulator: React.FC = () => {
   };
 
   const formatEther = (wei: number) => {
+    if (!isFinite(wei) || isNaN(wei)) {
+      return '0.00000000';
+    }
     return (wei / 1e18).toFixed(8);
   };
 
   const formatGwei = (wei: number) => {
+    if (!isFinite(wei) || isNaN(wei)) {
+      return '0.00';
+    }
     return (wei / 1e9).toFixed(2);
   };
 

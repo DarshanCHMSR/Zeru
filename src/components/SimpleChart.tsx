@@ -23,6 +23,9 @@ const SimpleChart: React.FC<SimpleChartProps> = ({ chain, height = 300 }) => {
   const chainData = chains[chain];
 
   const formatGwei = (value: number) => {
+    if (!isFinite(value) || isNaN(value)) {
+      return '0.00 Gwei';
+    }
     return `${value.toFixed(2)} Gwei`;
   };
 
@@ -36,6 +39,10 @@ const SimpleChart: React.FC<SimpleChartProps> = ({ chain, height = 300 }) => {
 
   const priceChange = currentPrice - previousPrice;
   const priceChangePercent = previousPrice > 0 ? (priceChange / previousPrice) * 100 : 0;
+
+  // Safety checks for NaN values
+  const safePriceChange = isFinite(priceChange) ? priceChange : 0;
+  const safePriceChangePercent = isFinite(priceChangePercent) ? priceChangePercent : 0;
 
   // Create simple SVG chart
   const createSimpleChart = () => {
@@ -85,6 +92,12 @@ const SimpleChart: React.FC<SimpleChartProps> = ({ chain, height = 300 }) => {
         {chainData.history.map((point, index) => {
           const x = (index / (chainData.history.length - 1)) * 100;
           const y = ((maxValue - point.close) / valueRange) * 80 + 10;
+          
+          // Safety check for NaN values
+          if (!isFinite(x) || !isFinite(y)) {
+            return null;
+          }
+          
           return (
             <circle
               key={index}
@@ -123,11 +136,11 @@ const SimpleChart: React.FC<SimpleChartProps> = ({ chain, height = 300 }) => {
           <div className="text-2xl font-bold text-white">
             {formatGwei(currentPrice)}
           </div>
-          <div className={`text-sm flex items-center ${priceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <div className={`text-sm flex items-center ${safePriceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             <span className="mr-1">
-              {priceChange >= 0 ? '↗' : '↘'}
+              {safePriceChange >= 0 ? '↗' : '↘'}
             </span>
-            {formatGwei(Math.abs(priceChange))} ({priceChangePercent.toFixed(2)}%)
+            {formatGwei(Math.abs(safePriceChange))} ({safePriceChangePercent.toFixed(2)}%)
           </div>
         </div>
       </div>
