@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { useGasStore } from '@/store/gasStore';
+import { DEV_CONFIG, devLog, isDevelopment } from '@/config/development';
 
 interface ChainConfig {
   name: string;
@@ -8,35 +9,41 @@ interface ChainConfig {
   blockTime: number; // in seconds
 }
 
-// Chain configurations
+// Chain configurations with more reliable RPC endpoints
 const CHAIN_CONFIGS = {
   ethereum: {
     name: 'Ethereum',
-    rpcUrl: 'https://eth.llamarpc.com',
+    rpcUrl: 'https://ethereum.publicnode.com',
     fallbackUrls: [
       'https://rpc.ankr.com/eth',
-      'https://ethereum.publicnode.com',
-      'https://1rpc.io/eth'
+      'https://eth.llamarpc.com',
+      'https://1rpc.io/eth',
+      'https://cloudflare-eth.com',
+      'https://ethereum.blockpi.network/v1/rpc/public'
     ],
     blockTime: 12,
   },
   polygon: {
     name: 'Polygon',
-    rpcUrl: 'https://polygon.llamarpc.com',
+    rpcUrl: 'https://polygon.publicnode.com',
     fallbackUrls: [
       'https://rpc.ankr.com/polygon',
-      'https://polygon.publicnode.com',
-      'https://1rpc.io/matic'
+      'https://polygon.llamarpc.com',
+      'https://1rpc.io/matic',
+      'https://polygon.blockpi.network/v1/rpc/public',
+      'https://polygon.drpc.org'
     ],
     blockTime: 2,
   },
   arbitrum: {
     name: 'Arbitrum',
-    rpcUrl: 'https://arbitrum.llamarpc.com',
+    rpcUrl: 'https://arbitrum.publicnode.com',
     fallbackUrls: [
       'https://rpc.ankr.com/arbitrum',
-      'https://arbitrum.publicnode.com',
-      'https://1rpc.io/arb'
+      'https://arbitrum.llamarpc.com',
+      'https://1rpc.io/arb',
+      'https://arbitrum.blockpi.network/v1/rpc/public',
+      'https://arbitrum.drpc.org'
     ],
     blockTime: 1,
   },
@@ -56,21 +63,43 @@ class Web3Service {
   private async initializeConnections() {
     const store = useGasStore.getState();
     store.setLoading(true);
+    store.setError(null);
 
     // Start with simulated data immediately to provide fallback
+    console.log('🚀 Starting Web3Service with fallback simulation...');
     this.startOfflineSimulation();
-
-    for (const [chainKey, config] of Object.entries(CHAIN_CONFIGS)) {
-      try {
-        await this.connectToChain(chainKey as keyof typeof CHAIN_CONFIGS, config);
-      } catch (error) {
-        console.error(`Failed to connect to ${chainKey}:`, error);
-        store.setError(`Failed to connect to ${config.name}`);
-      }
-    }
 
     // Start ETH/USD price monitoring
     this.startUsdPriceMonitoring();
+
+    // Try to connect to all chains in parallel (with individual error handling)
+    const connectionPromises = Object.entries(CHAIN_CONFIGS).map(async ([chainKey, config]) => {
+      try {
+        await this.connectToChain(chainKey as keyof typeof CHAIN_CONFIGS, config);
+        return { chainKey, success: true };
+      } catch (error) {
+        console.error(`Failed to connect to ${chainKey}:`, error);
+        return { chainKey, success: false, error };
+      }
+    });
+
+    // Wait for all connection attempts to complete
+    const results = await Promise.all(connectionPromises);
+    
+    // Check if any connections succeeded
+    const successfulConnections = results.filter(result => result.success);
+    
+    if (successfulConnections.length === 0) {
+      console.log('⚠️  No real blockchain connections available. Running in simulation mode.');
+      store.setError('No blockchain connections available. Using simulated data.');
+    } else {
+      console.log(`✅ Successfully connected to ${successfulConnections.length}/${results.length} blockchain(s)`);
+      if (successfulConnections.length < results.length) {
+        const failedChains = results.filter(r => !r.success).map(r => r.chainKey);
+        console.log(`⚠️  Failed to connect to: ${failedChains.join(', ')}. Using simulation for these chains.`);
+      }
+    }
+
     store.setLoading(false);
   }
 
@@ -81,39 +110,54 @@ class Web3Service {
     for (let i = 0; i < urlsToTry.length; i++) {
       const rpcUrl = urlsToTry[i];
       try {
-        console.log(`Attempting to connect to ${config.name} using ${rpcUrl}`);
-        const provider = new ethers.JsonRpcProvider(rpcUrl);
+        devLog(`Attempting to connect to ${config.name} using ${rpcUrl}`);
+        
+        // Create provider with better configuration
+        const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
+          batchMaxCount: 1,
+          batchMaxSize: 1024,
+          staticNetwork: true
+        });
 
-        // Test connection with timeout
+        // Test connection with shorter timeout and better error handling
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Connection timeout')), 10000)
+          setTimeout(() => reject(new Error('Connection timeout (5s)')), DEV_CONFIG.connectionTimeout)
         );
         
-        await Promise.race([
+        const blockNumber = await Promise.race([
           provider.getBlockNumber(),
           timeoutPromise
         ]);
 
+        if (typeof blockNumber !== 'number' || blockNumber <= 0) {
+          throw new Error('Invalid block number received');
+        }
+
         this.providers.set(chainKey, provider);
         this.isConnected.set(chainKey, true);
         store.setConnectionStatus(chainKey as ChainKey, true);
+        store.setError(null); // Clear any previous errors
 
-        console.log(`Successfully connected to ${config.name} using ${rpcUrl}`);
+        console.log(`✅ Successfully connected to ${config.name} using ${rpcUrl} (Block: ${blockNumber})`);
         
         // Start monitoring blocks for this chain
         this.startBlockMonitoring(chainKey, config);
         return; // Success, exit the retry loop
 
       } catch (error) {
-        console.error(`Failed to connect to ${config.name} using ${rpcUrl}:`, error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.warn(`❌ Failed to connect to ${config.name} using ${rpcUrl}: ${errorMessage}`);
         
         // If this was the last URL to try, mark as failed
         if (i === urlsToTry.length - 1) {
           this.isConnected.set(chainKey, false);
           store.setConnectionStatus(chainKey as ChainKey, false);
           
+          console.log(`🔄 All RPC endpoints failed for ${config.name}. Using simulation mode. Will retry in 30 seconds.`);
+          
           // Schedule retry after 30 seconds
           const timeout = setTimeout(() => {
+            console.log(`🔄 Retrying connection to ${config.name}...`);
             this.connectToChain(chainKey, config);
           }, 30000);
           
@@ -129,6 +173,8 @@ class Web3Service {
     if (!provider) return;
 
     const store = useGasStore.getState();
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 3;
 
     // For demo purposes, we'll poll for latest block every 6 seconds instead of real-time
     const pollLatestBlock = async () => {
@@ -160,15 +206,36 @@ class Web3Service {
           }
 
           store.updateGas(chainKey as ChainKey, baseFee, priorityFee);
+          consecutiveErrors = 0; // Reset error counter on success
+          
+          // Ensure connection status is marked as true
+          if (!this.isConnected.get(chainKey)) {
+            this.isConnected.set(chainKey, true);
+            store.setConnectionStatus(chainKey as ChainKey, true);
+            console.log(`✅ ${config.name} connection restored`);
+          }
         }
       } catch (error) {
-        console.error(`Error fetching block for ${chainKey}:`, error);
-        store.setConnectionStatus(chainKey as ChainKey, false);
+        consecutiveErrors++;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.warn(`⚠️  Error fetching block for ${chainKey} (${consecutiveErrors}/${maxConsecutiveErrors}): ${errorMessage}`);
         
-        // Retry connection
-        setTimeout(() => {
-          this.connectToChain(chainKey as keyof typeof CHAIN_CONFIGS, config);
-        }, 5000);
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          console.log(`❌ ${config.name} connection lost after ${maxConsecutiveErrors} consecutive errors`);
+          this.isConnected.set(chainKey, false);
+          store.setConnectionStatus(chainKey as ChainKey, false);
+          
+          // Remove the failed provider
+          this.providers.delete(chainKey);
+          
+          // Retry connection after 10 seconds
+          setTimeout(() => {
+            console.log(`🔄 Attempting to reconnect to ${config.name}...`);
+            this.connectToChain(chainKey as keyof typeof CHAIN_CONFIGS, config);
+          }, 10000);
+          
+          return; // Stop monitoring this chain
+        }
       }
     };
 
@@ -176,7 +243,10 @@ class Web3Service {
     await pollLatestBlock();
 
     // Set up interval polling
-    setInterval(pollLatestBlock, 6000); // Poll every 6 seconds
+    const intervalId = setInterval(pollLatestBlock, 6000); // Poll every 6 seconds
+    
+    // Store interval ID for cleanup
+    this.reconnectTimeouts.set(`${chainKey}_monitor`, intervalId as any);
   }
 
   private async startUsdPriceMonitoring() {
@@ -266,34 +336,58 @@ class Web3Service {
     // Provide simulated gas prices as fallback when RPC connections fail
     const store = useGasStore.getState();
     
+    console.log('🎭 Starting offline simulation for fallback data...');
+    
     const simulateGasPrices = () => {
-      // Generate realistic but fake gas prices
-      const ethBase = 15 + Math.random() * 20; // 15-35 Gwei
-      const ethPriority = 1 + Math.random() * 3; // 1-4 Gwei
+      const now = Date.now();
       
-      const polygonBase = 20 + Math.random() * 80; // 20-100 Gwei  
-      const polygonPriority = 1 + Math.random() * 2; // 1-3 Gwei
+      // Generate realistic but fake gas prices with more variation
+      const ethBase = Math.max(10, 15 + Math.random() * 40 - 10); // 10-45 Gwei with volatility
+      const ethPriority = Math.max(0.5, 1 + Math.random() * 4 - 1); // 0.5-4 Gwei
       
-      const arbitrumBase = 0.1 + Math.random() * 0.4; // 0.1-0.5 Gwei
-      const arbitrumPriority = 0.01 + Math.random() * 0.09; // 0.01-0.1 Gwei
+      const polygonBase = Math.max(15, 25 + Math.random() * 100 - 25); // 15-125 Gwei  
+      const polygonPriority = Math.max(0.5, 1 + Math.random() * 3 - 0.5); // 0.5-3.5 Gwei
+      
+      const arbitrumBase = Math.max(0.05, 0.2 + Math.random() * 0.6 - 0.15); // 0.05-0.65 Gwei
+      const arbitrumPriority = Math.max(0.005, 0.02 + Math.random() * 0.08 - 0.015); // 0.005-0.085 Gwei
+      
+      // Convert to wei for consistency
+      const ethBaseWei = ethBase * 1e9;
+      const ethPriorityWei = ethPriority * 1e9;
+      const polygonBaseWei = polygonBase * 1e9;
+      const polygonPriorityWei = polygonPriority * 1e9;
+      const arbitrumBaseWei = arbitrumBase * 1e9;
+      const arbitrumPriorityWei = arbitrumPriority * 1e9;
       
       // Only update if we don't have real connections
       if (!this.isConnected.get('ethereum')) {
-        store.updateGas('ethereum', ethBase, ethPriority);
+        store.updateGas('ethereum', ethBaseWei, ethPriorityWei);
       }
       if (!this.isConnected.get('polygon')) {
-        store.updateGas('polygon', polygonBase, polygonPriority);
+        store.updateGas('polygon', polygonBaseWei, polygonPriorityWei);
       }
       if (!this.isConnected.get('arbitrum')) {
-        store.updateGas('arbitrum', arbitrumBase, arbitrumPriority);
+        store.updateGas('arbitrum', arbitrumBaseWei, arbitrumPriorityWei);
+      }
+      
+      // Log simulation status occasionally
+      if (now % 60000 < 10000) { // Every ~minute
+        const simulated = [];
+        if (!this.isConnected.get('ethereum')) simulated.push('Ethereum');
+        if (!this.isConnected.get('polygon')) simulated.push('Polygon');
+        if (!this.isConnected.get('arbitrum')) simulated.push('Arbitrum');
+        
+        if (simulated.length > 0) {
+          console.log(`🎭 Simulating gas prices for: ${simulated.join(', ')}`);
+        }
       }
     };
 
     // Start simulation immediately
     simulateGasPrices();
     
-    // Update every 10 seconds
-    setInterval(simulateGasPrices, 10000);
+    // Update every 8 seconds (slightly different from real data to add variety)
+    setInterval(simulateGasPrices, 8000);
   }
 
   public disconnect() {

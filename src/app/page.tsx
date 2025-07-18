@@ -3,6 +3,7 @@
 import React, { useEffect } from 'react';
 import { useGasStore } from '@/store/gasStore';
 import { getWeb3Service } from '@/services/web3Service';
+import { debugRpcConnections } from '@/utils/rpcDebugger';
 import ModeToggle from '@/components/ModeToggle';
 import GasPriceOverview from '@/components/GasPriceOverview';
 import SimpleChart from '@/components/SimpleChart';
@@ -14,6 +15,11 @@ export default function Dashboard() {
   useEffect(() => {
     // Initialize Web3 service when component mounts
     const web3Service = getWeb3Service();
+    
+    // Run debug diagnostics in development
+    if (process.env.NODE_ENV === 'development') {
+      debugRpcConnections().catch(console.error);
+    }
     
     // Cleanup on unmount
     return () => {
@@ -48,7 +54,7 @@ export default function Dashboard() {
               {error && (
                 <div className="flex items-center space-x-2 text-red-400">
                   <div className="w-2 h-2 bg-red-400 rounded-full" />
-                  <span className="text-sm">Error: {error}</span>
+                  <span className="text-sm">Connection Issues</span>
                 </div>
               )}
             </div>
@@ -59,6 +65,30 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
+          {/* Connection Status Banner */}
+          {error && (
+            <div className="bg-amber-900/50 border border-amber-700 rounded-lg p-4">
+              <div className="flex items-start space-x-3">
+                <div className="w-5 h-5 bg-amber-400 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-amber-900 text-xs font-bold">!</span>
+                </div>
+                <div>
+                  <h3 className="text-amber-200 font-medium">
+                    Running in Simulation Mode
+                  </h3>
+                  <p className="text-amber-300 text-sm mt-1">
+                    Unable to connect to blockchain RPC endpoints. The app is displaying 
+                    realistic simulated gas prices instead of live data. 
+                    This is common in development environments.
+                  </p>
+                  <p className="text-amber-400 text-xs mt-2">
+                    Check the browser console for detailed connection diagnostics.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Mode Toggle */}
           <ModeToggle />
 
