@@ -1,11 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { 
-  createChart, 
-  IChartApi, 
-  LineData, 
-  ColorType
-} from 'lightweight-charts';
-import { useGasStore, GasPoint } from '@/store/gasStore';
+import React from 'react';
+import { useGasStore } from '@/store/gasStore';
 
 interface CandlestickChartProps {
   chain: 'ethereum' | 'polygon' | 'arbitrum';
@@ -25,92 +19,13 @@ const chainNames = {
 };
 
 const CandlestickChart: React.FC<CandlestickChartProps> = ({ chain, height = 300 }) => {
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ReturnType<IChartApi['addSeries']> | null>(null);
-  const [isChartReady, setIsChartReady] = useState(false);
-
   const { chains } = useGasStore();
   const chainData = chains[chain];
 
-  useEffect(() => {
-    if (!chartContainerRef.current) return;
-
-    // Create chart
-    const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
-      height: height,
-      layout: {
-        background: { type: ColorType.Solid, color: '#1a1a1a' },
-        textColor: '#d1d5db',
-      },
-      grid: {
-        vertLines: { color: '#374151' },
-        horzLines: { color: '#374151' },
-      },
-      crosshair: {
-        mode: 1,
-      },
-      rightPriceScale: {
-        borderColor: '#374151',
-        scaleMargins: {
-          top: 0.1,
-          bottom: 0.1,
-        },
-      },
-      timeScale: {
-        borderColor: '#374151',
-        timeVisible: true,
-        secondsVisible: false,
-      },
-    });
-
-    // Add line series (simplified from candlestick for compatibility)
-    const lineSeries = chart.addLineSeries({
-      color: chainColors[chain],
-      lineWidth: 2,
-    });
-
-    chartRef.current = chart;
-    seriesRef.current = lineSeries;
-    setIsChartReady(true);
-
-    // Handle resize
-    const handleResize = () => {
-      if (chartContainerRef.current && chart) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-        });
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      chart.remove();
-    };
-  }, [height, chain]);
-
-  useEffect(() => {
-    if (!isChartReady || !seriesRef.current || !chainData.history.length) return;
-
-    // Convert GasPoint data to LineData format (using close price)
-    const lineData: LineData[] = chainData.history.map((point: GasPoint) => ({
-      time: Math.floor(point.time / 1000) as LineData['time'], // Convert to seconds
-      value: point.close,
-    }));
-
-    // Update series data
-    seriesRef.current.setData(lineData);
-
-    // Fit content to show all data
-    if (chartRef.current) {
-      chartRef.current.timeScale().fitContent();
-    }
-  }, [chainData.history, isChartReady]);
-
   const formatGwei = (value: number) => {
+    if (!isFinite(value) || isNaN(value)) {
+      return '0.00 Gwei';
+    }
     return `${value.toFixed(2)} Gwei`;
   };
 
@@ -124,6 +39,79 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ chain, height = 300
 
   const priceChange = currentPrice - previousPrice;
   const priceChangePercent = previousPrice > 0 ? (priceChange / previousPrice) * 100 : 0;
+
+  // Safety checks for NaN values
+  const safePriceChange = isFinite(priceChange) ? priceChange : 0;
+  const safePriceChangePercent = isFinite(priceChangePercent) ? priceChangePercent : 0;
+
+  // Create simple SVG chart (same as SimpleChart but embedded)
+  const createSimpleChart = () => {
+    if (!chainData.history.length) return null;
+
+    const maxValue = Math.max(...chainData.history.map(p => p.close));
+    const minValue = Math.min(...chainData.history.map(p => p.close));
+    const valueRange = maxValue - minValue || 1;
+
+    // Safety check for NaN values
+    if (!isFinite(maxValue) || !isFinite(minValue) || !isFinite(valueRange)) {
+      return null;
+    }
+
+    const points = chainData.history.map((point, index) => {
+      const x = (index / (chainData.history.length - 1)) * 100;
+      const y = ((maxValue - point.close) / valueRange) * 80 + 10;
+      
+      // Safety check for NaN values
+      if (!isFinite(x) || !isFinite(y)) {
+        return '0,0';
+      }
+      
+      return `${x},${y}`;
+    }).join(' ');
+
+    return (
+      <svg width="100%" height="100%" viewBox="0 0 100 100" className="absolute inset-0">
+        {/* Grid lines */}
+        <defs>
+          <pattern id={`grid-${chain}`} width="10" height="10" patternUnits="userSpaceOnUse">
+            <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#374151" strokeWidth="0.5" opacity="0.3"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill={`url(#grid-${chain})`} />
+        
+        {/* Price line */}
+        <polyline
+          points={points}
+          fill="none"
+          stroke={chainColors[chain]}
+          strokeWidth="2"
+          vectorEffect="non-scaling-stroke"
+        />
+        
+        {/* Data points */}
+        {chainData.history.map((point, index) => {
+          const x = (index / (chainData.history.length - 1)) * 100;
+          const y = ((maxValue - point.close) / valueRange) * 80 + 10;
+          
+          // Safety check for NaN values
+          if (!isFinite(x) || !isFinite(y)) {
+            return null;
+          }
+          
+          return (
+            <circle
+              key={index}
+              cx={x}
+              cy={y}
+              r="1"
+              fill={chainColors[chain]}
+              className="opacity-60"
+            />
+          );
+        })}
+      </svg>
+    );
+  };
 
   return (
     <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
@@ -148,23 +136,22 @@ const CandlestickChart: React.FC<CandlestickChartProps> = ({ chain, height = 300
           <div className="text-2xl font-bold text-white">
             {formatGwei(currentPrice)}
           </div>
-          <div className={`text-sm flex items-center ${priceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <div className={`text-sm flex items-center ${safePriceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             <span className="mr-1">
-              {priceChange >= 0 ? '↗' : '↘'}
+              {safePriceChange >= 0 ? '↗' : '↘'}
             </span>
-            {formatGwei(Math.abs(priceChange))} ({priceChangePercent.toFixed(2)}%)
+            {formatGwei(Math.abs(safePriceChange))} ({safePriceChangePercent.toFixed(2)}%)
           </div>
         </div>
       </div>
 
       {/* Chart */}
       <div 
-        ref={chartContainerRef} 
-        className="relative"
+        className="relative bg-gray-900 rounded"
         style={{ height: `${height}px` }}
       >
-        {!chainData.history.length && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 rounded">
+        {chainData.history.length > 0 ? createSimpleChart() : (
+          <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
               <div className="text-gray-400 mb-2">
                 {chainData.isConnected ? 'Waiting for data...' : 'Not connected'}
